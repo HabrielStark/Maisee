@@ -21,6 +21,7 @@
     color:var(--ink);
     font-family: ui-rounded, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
     overflow:hidden;
+    cursor: none;
   }
   .wrap{
     position:relative;
@@ -90,6 +91,32 @@
     opacity:.45;
     letter-spacing:.2px;
   }
+  
+  /* Custom cursor styles */
+  .custom-cursor{
+    position:fixed;
+    width:20px; height:20px;
+    pointer-events:none;
+    z-index:9999;
+    transform:translate(-50%,-50%);
+    filter: drop-shadow(0 2px 4px rgba(255,147,186,0.3));
+    will-change: transform;
+    transition: transform 0.1s ease-out;
+  }
+  .custom-cursor path{
+    fill:#ff93ba;
+    stroke:rgba(255,255,255,0.8);
+    stroke-width:0.5;
+  }
+  
+  /* Cursor trail canvas */
+  #cursorTrailCanvas{
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    pointer-events:none;
+    z-index:9998;
+  }
 </style>
 
 <script type="importmap">
@@ -99,6 +126,14 @@
 </script>
 </head>
 <body>
+  <!-- Custom cursor trail canvas -->
+  <canvas id="cursorTrailCanvas"></canvas>
+  
+  <!-- Custom cursor -->
+  <svg class="custom-cursor" id="customCursor" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 21s-5.2-3.46-8.04-6.3C1.9 12.64 1.5 9.7 3.35 7.84c1.63-1.64 4.38-1.64 6.01 0L12 10.49l2.64-2.65c1.63-1.64 4.38-1.64 6.01 0 1.85 1.86 1.45 4.8-.61 6.86C17.2 17.54 12 21 12 21z"/>
+  </svg>
+
   <div class="wrap">
     <canvas id="scene"></canvas>
 
@@ -130,6 +165,83 @@
   </div>
 
 <script type="module">
+// Custom cursor system
+const cursorEl = document.getElementById('customCursor');
+const cursorTrailCanvas = document.getElementById('cursorTrailCanvas');
+const cursorCtx = cursorTrailCanvas.getContext('2d');
+const cursorDpr = Math.max(1, window.devicePixelRatio || 1);
+
+let cursorX = 0, cursorY = 0;
+let cursorTrail = [];
+
+function setupCursorTrail(){
+  cursorTrailCanvas.width = window.innerWidth * cursorDpr;
+  cursorTrailCanvas.height = window.innerHeight * cursorDpr;
+  cursorTrailCanvas.style.width = window.innerWidth + 'px';
+  cursorTrailCanvas.style.height = window.innerHeight + 'px';
+  cursorCtx.setTransform(cursorDpr,0,0,cursorDpr,0,0);
+}
+
+function updateCursor(e){
+  cursorX = e.clientX;
+  cursorY = e.clientY;
+  cursorEl.style.left = cursorX + 'px';
+  cursorEl.style.top = cursorY + 'px';
+  
+  // Add point to trail
+  cursorTrail.push({
+    x: cursorX,
+    y: cursorY,
+    time: performance.now(),
+    opacity: 1
+  });
+  
+  // Limit trail length
+  if (cursorTrail.length > 50) {
+    cursorTrail.shift();
+  }
+}
+
+function drawCursorTrail(){
+  cursorCtx.clearRect(0, 0, cursorTrailCanvas.width / cursorDpr, cursorTrailCanvas.height / cursorDpr);
+  
+  if (cursorTrail.length < 2) return;
+  
+  const now = performance.now();
+  
+  // Remove old points and update opacity
+  cursorTrail = cursorTrail.filter(point => {
+    const age = now - point.time;
+    if (age > 1000) return false; // Remove after 1 second
+    point.opacity = Math.max(0, 1 - age / 1000);
+    return true;
+  });
+  
+  // Draw trail
+  cursorCtx.lineCap = 'round';
+  cursorCtx.lineJoin = 'round';
+  
+  for (let i = 1; i < cursorTrail.length; i++){
+    const prev = cursorTrail[i-1];
+    const curr = cursorTrail[i];
+    const avgOpacity = (prev.opacity + curr.opacity) / 2;
+    
+    if (avgOpacity <= 0.01) continue;
+    
+    const gradient = cursorCtx.createLinearGradient(prev.x, prev.y, curr.x, curr.y);
+    gradient.addColorStop(0, `rgba(255, 147, 186, ${prev.opacity * 0.6})`);
+    gradient.addColorStop(1, `rgba(255, 147, 186, ${curr.opacity * 0.6})`);
+    
+    cursorCtx.strokeStyle = gradient;
+    cursorCtx.lineWidth = 3 * avgOpacity;
+    cursorCtx.beginPath();
+    cursorCtx.moveTo(prev.x, prev.y);
+    cursorCtx.lineTo(curr.x, curr.y);
+    cursorCtx.stroke();
+  }
+}
+
+// Main animation elements
 const canvas = document.getElementById('scene');
 const ctx = canvas.getContext('2d');
 const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -146,6 +258,7 @@ function resize(){
   W = canvas.width = Math.floor(clientWidth * dpr);
   H = canvas.height = Math.floor(clientHeight * dpr);
   ctx.setTransform(dpr,0,0,dpr,0,0);
+  setupCursorTrail();
 }
 window.addEventListener('resize', resize);
 
@@ -377,6 +490,9 @@ function loop(now){
     ballEl.style.opacity = '0';
   }
 
+  // Draw cursor trail
+  drawCursorTrail();
+  
   rafId = requestAnimationFrame(loop);
 }
 
@@ -399,6 +515,9 @@ function init(){
   canvas.style.height = '100%';
   resize();
 
+  // Initialize cursor trail
+  setupCursorTrail();
+  
   const x0 = pathX(0);
   const y0 = pathY(0);
   positionBall(x0, y0, 0,1,1);
@@ -407,6 +526,11 @@ function init(){
 
   T.start = performance.now();
   rafId = requestAnimationFrame(loop);
+  
+  // Cursor events
+  document.addEventListener('mousemove', updateCursor);
+  document.addEventListener('mouseenter', () => cursorEl.style.opacity = '1');
+  document.addEventListener('mouseleave', () => cursorEl.style.opacity = '0');
 
   // Restart on click/tap or key press (Space/Enter)
   const restart = (e) => {
