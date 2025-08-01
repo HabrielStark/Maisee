@@ -58,7 +58,7 @@
   .signature{
     position:absolute;
     left:50%;
-    top:65%;
+    top:67%;
     transform:translate(-50%,-50%);
     color:var(--ink);
     font-size: clamp(18px, 4vw, 42px);
@@ -69,6 +69,8 @@
     line-height:1.12;
     text-shadow: 0 1px 0 rgba(255,255,255,0.35);
     will-change: opacity, transform;
+    width: 90%;
+    max-width: 800px;
   }
   .heart{
     position:absolute;
@@ -364,9 +366,7 @@ function setSignatureOpacity(o){
   sigEl.style.opacity = o.toFixed(3);
 }
 function layoutSignature(){
-  const y = 0.67 * H/dpr;
-  sigEl.style.left = '50%';
-  sigEl.style.top = y + 'px';
+  // Text positioning is now handled by CSS for better centering
 }
 
 // Background subtle grain + vignette
