@@ -47,4 +47,4 @@ Works in all modern browsers that support:
 
 ---
 
-Made with care • No external assets 
+Made with care by Habriel 
